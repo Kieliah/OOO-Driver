@@ -1,0 +1,858 @@
+#include <DFRobotDFPlayerMini.h>
+#include <MFRC522.h>
+#include <SPI.h>
+#include <SoftwareSerial.h>
+
+#define SS_PIN 10
+#define RST_PIN 9
+#define RED 3
+#define BLUE 5
+#define GREEN 6
+#define LED1 A0
+#define LED2 A1
+#define LED3 A2
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+SoftwareSerial mySoftwareSerial(4, 7); // RX, TX
+DFRobotDFPlayerMini myDFPlayer;
+
+void setup() {
+pinMode(LED1,OUTPUT); //LED 1
+pinMode(LED2,OUTPUT); //LED 2
+pinMode(LED3,OUTPUT); //LED 3
+pinMode(RED,OUTPUT); //RED
+pinMode(BLUE,OUTPUT); //BLUE
+pinMode(GREEN,OUTPUT); //GREEN
+pinMode (A3,INPUT_PULLUP); //BUTTON
+
+//Some initialization steps for the RFID reader and DFPlayer. A couple lines are vesitigial and only serve for debugging purposes
+mySoftwareSerial.begin(9600);
+  Serial.begin(9600);  
+  SPI.begin();      
+  mfrc522.PCD_Init();  
+  Serial.println("Approximate your card to the reader...");
+  Serial.println();
+  if (!myDFPlayer.begin(mySoftwareSerial)) {
+    while(true);
+  }
+  Serial.println("Approximate your card to the reader...");
+  myDFPlayer.volume(30);  //Set volume value. From 0 to 30
+}
+
+//START OF MAIN LOOP
+void loop() {
+//Set each slot to empty
+  int slot1 = 0;
+  int slot2 = 0;
+  int slot3 = 0;
+
+ while(digitalRead(A3) != LOW){
+    }
+//Play the standby noise on repeat until the button isn't being pushed anymore
+ while(digitalRead(A3) == LOW){
+  Standby();
+ }
+  //Repeatedly look for slot 1 medal. 
+  //You'll need to make sure to move the scanner off the tag relatively quickly so it doesn't scan the same medal multiple times.
+  while(slot1 == 0){
+    String slotScan = SlotScan();
+    slot1 = Translate(slotScan);
+    Serial.println(slot1);
+    if(slot1 == 66){
+      allCombos();
+      return;
+    }
+    if(slot1 != 0){
+    myDFPlayer.play(slot1);
+    digitalWrite(LED1, HIGH);
+    //delay(500);
+    }
+    RGBOff();
+  }
+  //Repeatedly look for slot 2 medal
+  while(slot2 == 0){
+    String slotScan = SlotScan();
+    slot2 = Translate(slotScan);
+    if(slot1 == 66){
+      allCombos();
+      return;
+    }
+    if(slot2 == slot1){
+      slot2 = 0;
+    }
+    Serial.println(slot2);
+    if(slot2!=0){
+    myDFPlayer.play(slot2);
+    digitalWrite(LED2,HIGH);
+    //delay(500);
+    }
+    RGBOff();
+  }
+
+  //Repeatedly look for slot 3 medal
+  while(slot3 == 0){
+    String slotScan = SlotScan();
+    slot3 = Translate(slotScan);
+    if(slot3 == slot1 || slot3 == slot2){
+      slot3 = 0;
+    }
+    Serial.println(slot3);
+    if(slot1 == 66){
+      allCombos();
+      return;
+    }
+    if(slot3!=0){
+    myDFPlayer.play(slot3);
+    digitalWrite(LED3,HIGH);
+    delay(750);
+    }
+    RGBOff();
+  }
+
+ //Repeat Scanned medals and combo if applicable
+    ComboCheck(slot1,slot2,slot3);
+    RGBCycle();
+    for(int i=0;i<5;i++){
+      allOff();
+      delay(250);
+      allOn();
+      delay(250);
+    }
+  delay(3000);
+  allOff();
+}
+//Function to detect if a tag is nearby, and copy the UID off the tag
+String SlotScan(){
+  if ( ! mfrc522.PICC_IsNewCardPresent() || ! mfrc522.PICC_ReadCardSerial() ) {
+    return "";
+  }
+      String content= "";
+      byte letter;
+      for (byte i = 0; i < mfrc522.uid.size; i++) 
+      {
+        content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
+        content.concat(String(mfrc522.uid.uidByte[i], HEX));
+      }
+      content.toUpperCase();
+      return content;
+}
+//The translations for all of the medals. IMPORTANT NOTE: You will need to change toTrans.substring(1) == "[Enter your UID here]" to match your specific ID tags. 
+int Translate(String toTrans){
+  /*Use this function to add new medals*/
+      int medal = 0;
+      if(toTrans.substring(1) == "04 E0 81 8A 21 6E 80"){ //Taka
+        medal = 5;
+        myDFPlayer.play(2);
+        MedalColor(1);
+
+      }
+      else if(toTrans.substring(1) == "04 6B 60 8A 21 6E 81"){ //Kujaku
+        medal = 6;
+        myDFPlayer.play(3);
+        MedalColor(1);
+      }
+      else if(toTrans.substring(1) == "04 99 54 8A 21 6E 80"){ //Condor
+        medal = 7;
+        myDFPlayer.play(4);
+        MedalColor(1);
+      }      
+      else if(toTrans.substring(1) == "04 4D AB 8A 21 6E 80"){ //Tora
+        medal = 12;
+        myDFPlayer.play(3);
+        MedalColor(3);
+      }
+      else if(toTrans.substring(1) == "04 8C 7D 8A 21 6E 81"){ //Batta
+        medal = 10;
+        myDFPlayer.play(4);
+        MedalColor(2);
+      }
+      else if(toTrans.substring(1) == "04 A8 DC 8A 21 6E 80"){ //Sai
+        medal = 14;
+        myDFPlayer.play(2);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 11 67 8A 21 6E 81"){ //Gorilla
+        medal = 15;
+        myDFPlayer.play(3);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 77 6E 8A 21 6E 80"){ //Zou
+        medal = 16;
+        myDFPlayer.play(4);
+        MedalColor(8);
+      }     
+      else if(toTrans.substring(1) == "04 6E F6 8A 21 6E 80"){ //Lion
+        medal = 11;
+        myDFPlayer.play(2);
+        MedalColor(3);
+      }  
+      else if(toTrans.substring(1) == "04 6A F9 8A 21 6E 80"){ //Cheetah
+        medal = 13;
+        myDFPlayer.play(4);
+        MedalColor(3);
+      } 
+      else if(toTrans.substring(1) == "04 CA B4 8A 21 6E 80"){ //Kuwagata
+        medal = 8;
+        myDFPlayer.play(2);
+        MedalColor(2);
+      } 
+      else if(toTrans.substring(1) == "04 DE 97 8A 21 6E 80"){ //Kamakiri
+        medal = 9;
+        myDFPlayer.play(3);
+        MedalColor(2);
+      } 
+      else if(toTrans.substring(1) == "04 71 4A 8A 21 6E 81"){ //Shachi
+        medal = 17;
+        myDFPlayer.play(2);
+        MedalColor(4);
+      } 
+      else if(toTrans.substring(1) == "04 E7 D3 52 24 6E 80"){ //Unagi
+        medal = 18;
+        myDFPlayer.play(3);
+        MedalColor(4);
+      } 
+      else if(toTrans.substring(1) == "04 E9 D3 8A 21 6E 80"){ //Tako
+        medal = 19;
+        myDFPlayer.play(4);
+        MedalColor(4);
+      }
+      else if(toTrans.substring(1) == "04 27 6F 8A 21 6E 80"){ //Ptera
+        medal = 20;
+        myDFPlayer.play(2);
+        MedalColor(6);
+      }
+      else if(toTrans.substring(1) == "04 D5 0B 8A 21 6E 80"){ //Tricera
+        medal = 21;
+        myDFPlayer.play(3);
+        MedalColor(6);
+      }
+      else if(toTrans.substring(1) == "04 43 83 8A 21 6E 81"){ //Tyranno
+        medal = 22;
+        myDFPlayer.play(4);
+        MedalColor(6);
+      }
+      else if(toTrans.substring(1) == "04 4A 4B 8A 21 6E 80"){ //Cobra
+        medal = 23;
+        myDFPlayer.play(2);
+        MedalColor(7);
+      }
+      else if(toTrans.substring(1) == "04 DD C4 8A 21 6E 80"){ //Kame
+        medal = 24;
+        myDFPlayer.play(3);
+        MedalColor(7);
+      }
+      else if(toTrans.substring(1) == "04 D1 82 8A 21 6E 80"){ //Wani
+        medal = 25;
+        myDFPlayer.play(4);
+        MedalColor(7);
+      }
+        else if(toTrans.substring(1) == "04 23 C6 8A 21 6E 81"){ //Imagin
+        medal = 26;
+        myDFPlayer.play(3);
+        MedalColor(1);
+      }
+      else if(toTrans.substring(1) == "04 3F 3C 8A 21 6E 81"){ //Shocker
+        medal = 27;
+        myDFPlayer.play(4);
+        MedalColor(3);
+      }
+      else if(toTrans.substring(1) == "04 12 4D 8A 21 6E 81"){ //Okami
+        medal = 58;
+        myDFPlayer.play(2);
+        MedalColor(3);
+      }
+      else if(toTrans.substring(1) == "04 58 D7 8A 21 6E 80"){ //Ebi
+        medal = 31;
+        myDFPlayer.play(2);
+        MedalColor(7);
+      }
+      else if(toTrans.substring(1) == "04 BD 37 8A 21 6E 80"){ //Kani
+        medal = 32;
+        myDFPlayer.play(3);
+        MedalColor(1);
+      }
+      else if(toTrans.substring(1) == "04 70 C0 8A 21 6E 80"){ //Sasori
+        medal = 33;
+        myDFPlayer.play(4);
+        MedalColor(6);
+      }
+      else if(toTrans.substring(1) == "04 72 DD 8A 21 6E 80"){ //Same
+        medal = 28;
+        myDFPlayer.play(2);
+        MedalColor(4);
+      }
+      else if(toTrans.substring(1) == "04 44 BF 8A 21 6E 80"){ //Kujira
+        medal = 29;
+        myDFPlayer.play(3);
+        MedalColor(4);
+      }
+      else if(toTrans.substring(1) == "04 8C DA 8A 21 6E 80"){ //Ookamiuo
+        medal = 30;
+        myDFPlayer.play(4);
+        MedalColor(1);
+      }
+      else if(toTrans.substring(1) == "04 94 5D 8A 21 6E 80"){ //Mukade
+        medal = 35;
+        myDFPlayer.play(2);
+        MedalColor(6);
+      }
+      else if(toTrans.substring(1) == "04 08 AB 8A 21 6E 81"){ //Hachi
+        medal = 34;
+        myDFPlayer.play(3);
+        MedalColor(3);
+      }
+      else if(toTrans.substring(1) == "04 DD 37 8A 21 6E 80"){ //Ari
+        medal = 36;
+        myDFPlayer.play(4);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 D0 BE 8A 21 6E 80"){ //Shika
+        medal = 37;
+        myDFPlayer.play(2);
+        MedalColor(7);
+      }
+      else if(toTrans.substring(1) == "04 FA 7B 8A 21 6E 80"){ //Gazelle
+        medal = 38;
+        myDFPlayer.play(3);
+        MedalColor(1);
+      }
+      else if(toTrans.substring(1) == "04 59 BA 8A 21 6E 81"){ //Ushi
+        medal = 39;
+        myDFPlayer.play(4);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 6E 6C 8A 21 6E 81"){ //Seiuchi
+        medal = 40;
+        myDFPlayer.play(2);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 38 E0 8A 21 6E 81"){ //Shirokuma
+        medal = 41;
+        myDFPlayer.play(3);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 6E EB 8A 21 6E 80"){ //Penguin
+        medal = 42;
+        myDFPlayer.play(4);
+        MedalColor(4);
+      }
+      else if(toTrans.substring(1) == "04 44 8D 8A 21 6E 80"){ //Kangaroo
+        medal = 62;
+        myDFPlayer.play(2);
+        MedalColor(3);
+      }
+      else if(toTrans.substring(1) == "04 20 AA 8A 21 6E 80"){ //Panda
+        medal = 63;
+        myDFPlayer.play(3);
+        MedalColor(8);
+      }
+      else if(toTrans.substring(1) == "04 11 FD 8A 21 6E 81"){ //Yadokari
+        medal = 64;
+        myDFPlayer.play(4);
+        MedalColor(5);
+      }
+      else if(toTrans.substring(1) == "04 7E 4F 8A 21 6E 80"){ //Super Taka
+        medal = 59;
+        myDFPlayer.play(2);
+        MedalColor(1);
+      }
+      else if(toTrans.substring(1) == "04 C2 6C 8A 21 6E 80"){ //Super Tora
+        medal = 60;
+        myDFPlayer.play(3);
+        MedalColor(3);
+      }
+      else if(toTrans.substring(1) == "04 B5 DC 8A 21 6E 80"){ //Super Batta
+        medal = 61;
+        myDFPlayer.play(4);
+        MedalColor(2);
+      }
+      else if(toTrans.substring(1) == "04 39 2E 8A 21 6E 81"){ //ALL MEDALS AND COMBOS
+        medal = 66;
+        myDFPlayer.play(4);
+      }
+      
+    return medal;
+}
+//Takes Slot1, Slot2, and Slot3 and plays the related sounds, and if there is a combo plays the respective sound.
+void ComboCheck(int part1, int part2, int part3){
+  String combo = "No combo";
+  RGBOff();
+  if(part1 == 5 && part2 == 6 && part3 == 7){
+    combo = "Tajadol";
+    myDFPlayer.play(5);
+    MedalColor(1);
+    myDFPlayer.play(6);
+    MedalColor(1);
+    myDFPlayer.play(7);
+    MedalColor(1);
+    myDFPlayer.play(48);
+    RGBOff();
+  }
+
+  else if (part1 == 11  && part2 == 12 && part3 == 13){
+    combo == "Latoratar";
+    myDFPlayer.play(11);
+    MedalColor(3);
+    myDFPlayer.play(12);
+    MedalColor(3);
+    myDFPlayer.play(13);
+    MedalColor(3);
+    myDFPlayer.play(45);
+  }
+  else if (part1 == 8  && part2 == 9 && part3 == 10){
+    combo == "Gatakiriba";
+    myDFPlayer.play(8);
+    MedalColor(2);
+    myDFPlayer.play(9);
+    MedalColor(2);
+    myDFPlayer.play(10);
+    MedalColor(2);
+    myDFPlayer.play(44);
+  }
+  else if(part1 == 14 && part2 == 15 && part3 == 16){
+    combo = "Sagohzou";
+    myDFPlayer.play(14);
+    MedalColor(8);
+    myDFPlayer.play(15);
+    MedalColor(8);
+    myDFPlayer.play(16);
+    MedalColor(8);
+    myDFPlayer.play(46);
+    RGBOff();
+  }
+  else if (part1 == 17  && part2 == 18 && part3 == 19){
+    combo == "Shauta";
+    myDFPlayer.play(17);
+    MedalColor(4);
+    myDFPlayer.play(18);
+    MedalColor(4);
+    myDFPlayer.play(19);
+    MedalColor(4);
+    myDFPlayer.play(47);
+  }
+  else if(part1 == 20 && part2 == 21 && part3 == 22){
+    combo = "Putotyra";
+    myDFPlayer.play(20);
+    MedalColor(6);
+    myDFPlayer.play(21);
+    MedalColor(6);
+    myDFPlayer.play(22);
+    MedalColor(6);
+    myDFPlayer.play(49);
+    RGBOff();
+  }
+  else if(part1 == 23 && part2 == 24 && part3 == 25){
+    combo = "Burakawani";
+    myDFPlayer.play(23);
+    MedalColor(7);
+    myDFPlayer.play(24);
+    MedalColor(7);
+    myDFPlayer.play(25);
+    MedalColor(7);
+    myDFPlayer.play(50);
+    RGBOff();
+  }
+  else if(part1 == 5 && part2 == 12 && part3 == 10){
+    combo = "Tatoba";
+    myDFPlayer.play(5);
+    MedalColor(1);
+    myDFPlayer.play(12);
+    MedalColor(3);
+    RGBOff();
+    myDFPlayer.play(10);
+    MedalColor(2);
+    RGBOff();
+    myDFPlayer.play(43);
+  }
+  else if(part1 == 5 && part2 == 26 && part3 == 27){
+    combo = "Tamashiy";
+    myDFPlayer.play(5);
+    MedalColor(1);
+    myDFPlayer.play(26);
+    MedalColor(1);
+    myDFPlayer.play(27);
+    MedalColor(3);
+    myDFPlayer.play(51);
+    RGBOff();
+  }
+  else if(part1 == 31 && part2 == 32 && part3 == 33){
+    combo = "Bikaso";
+    myDFPlayer.play(31);
+    MedalColor(7);
+    myDFPlayer.play(32);
+    MedalColor(1);
+    myDFPlayer.play(33);
+    MedalColor(6);
+    myDFPlayer.play(54);
+    RGBOff();
+  }
+  else if(part1 == 28 && part2 == 29 && part3 == 30){
+    combo = "Saramiuo";
+    myDFPlayer.play(28);
+    MedalColor(4);
+    myDFPlayer.play(29);
+    MedalColor(4);
+    myDFPlayer.play(30);
+    MedalColor(1);
+    delay(500);
+    myDFPlayer.play(53);
+    RGBOff();
+  }
+  else if(part1 == 35 && part2 == 34 && part3 == 36){
+    combo = "Mukachiri";
+    myDFPlayer.play(35);
+    MedalColor(6);
+    myDFPlayer.play(34);
+    MedalColor(3);
+    myDFPlayer.play(36);
+    MedalColor(8);
+    myDFPlayer.play(55);
+    RGBOff();
+  }
+  else if(part1 == 37 && part2 == 38 && part3 == 39){
+    combo = "Shigazeshi";
+    myDFPlayer.play(37);
+    MedalColor(7);
+    myDFPlayer.play(38);
+    MedalColor(1);
+    myDFPlayer.play(39);
+    MedalColor(8);
+    myDFPlayer.play(56);
+    RGBOff();
+  }
+  else if(part1 == 40 && part2 == 41 && part3 == 42){
+    combo = "Seishirogin";
+    myDFPlayer.play(40);
+    MedalColor(8);
+    myDFPlayer.play(41);
+    MedalColor(8);
+    myDFPlayer.play(42);
+    MedalColor(4);
+    myDFPlayer.play(57);
+    RGBOff();
+  }
+  else if(part1 == 59 && part2 == 60 && part3 == 61){
+    combo = "Super Tatoba";
+    myDFPlayer.play(59);
+    delay(500);
+    MedalColor(1);
+    myDFPlayer.play(60);
+    delay(500);
+    MedalColor(3);
+    myDFPlayer.play(61);
+    delay(750);
+    MedalColor(2);
+    myDFPlayer.play(52);
+    RGBOff();
+  }
+  
+  else{
+    myDFPlayer.play(part1);
+    delay(500);
+    myDFPlayer.play(part2);
+    delay(500);
+    myDFPlayer.play(part3);
+    delay(500);
+    myDFPlayer.play(65);
+    
+  }
+}
+//Essentially a table that determines the color for the RGB LED to display when a medal is scanned. 
+void MedalColor(int code){
+  switch (code){
+    case 1: //RED
+      fadeRed(15);
+      break;
+    case 2: //GREEN
+      fadeGreen(15);
+      break;
+    case 3: //YELLOW
+      fadeYellow(15);
+      break;
+    case 4: //BLUE
+      fadeBlue(15);
+      break;
+    case 5: //CYAN
+      analogWrite(BLUE, 255);
+      analogWrite(GREEN, 255);
+      break;
+    case 6: //PURPLE
+      fadePurple(15);
+      break;
+    case 7: //ORANGE
+      fadeOrange(15);
+      break;
+    case 8: //WHITE
+      fadeWhite(15);
+      break;
+    default:
+      break;
+  }
+     delay(250);
+}
+void allOff(){ //Pretty self explanatory
+      digitalWrite(LED1, LOW);
+      digitalWrite(LED2, LOW);
+      digitalWrite(LED3, LOW);
+      digitalWrite(RED, LOW);
+      digitalWrite(BLUE, LOW);
+      digitalWrite(GREEN, LOW);
+}
+void allOn(){ //This too
+      digitalWrite(LED1, HIGH);
+      digitalWrite(LED2, HIGH);
+      digitalWrite(LED3, HIGH);
+      digitalWrite(RED, HIGH);
+      digitalWrite(BLUE, HIGH);
+      digitalWrite(GREEN, HIGH);
+}
+void RGBOff(){ //Same here
+      digitalWrite(RED, LOW);
+      digitalWrite(BLUE, LOW);
+      digitalWrite(GREEN, LOW);
+}
+//Cycles through the RGB colorspace. Looks really pretty. 
+void RGBCycle(){
+  int redValue = 0;
+  int greenValue = 0;
+  int blueValue = 0;
+  #define delayTime 25
+  RGBOff();
+
+  analogWrite(RED,255);
+  delay(250);
+  for (int i=0;i<255;i+=10){
+    greenValue += 5;
+    redValue -= 5;
+    analogWrite(GREEN,greenValue);
+    analogWrite(RED,redValue);
+    delay(delayTime);
+  }
+  for (int i=0;i<255;i+=10){
+    blueValue += 5;
+    greenValue -= 5;
+    analogWrite(BLUE,blueValue);
+    analogWrite(GREEN,greenValue);
+    delay(delayTime);
+  }
+  for (int i=0;i<255;i+=10){
+    redValue += 5;
+    blueValue -= 5;
+    analogWrite(RED,redValue);
+    analogWrite(BLUE,blueValue);
+    delay(delayTime);
+  }
+  analogWrite(RED,255);
+  for (int i=0;i<255;i+=10){
+    greenValue += 5;
+    blueValue += 5;
+    analogWrite(GREEN,greenValue);
+    analogWrite(BLUE,blueValue);
+    delay(delayTime);
+  }
+
+  RGBOff();
+  
+}
+//Cycles through each color and playing the standby noise
+void Standby(){
+ //LED red > yellow > blue > orange > green > purple > white > repeat
+ #define delayTheTime 0
+  myDFPlayer.play(1);
+  fadeRed(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+  myDFPlayer.play(1);
+  fadeYellow(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+  myDFPlayer.play(1);
+  fadeBlue(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+  myDFPlayer.play(1);
+  fadeOrange(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+  myDFPlayer.play(1);
+  fadeGreen(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+  myDFPlayer.play(1);
+  fadePurple(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+  myDFPlayer.play(1);
+  fadeWhite(5);
+  if(digitalRead(A3) != LOW){
+    return;
+  }
+  delay(delayTheTime);
+}
+
+//all of the fadeCOLOR functions do the same thing for different colors - bring the brightness up then quickly back down.
+void fadeRed(int x){
+   int redValue=0;
+   //brighten then dim in red
+  for(int i=0;i<255;i+=x){
+    redValue += 5;
+    analogWrite(RED, redValue);
+    delay(10);
+  }
+    for(int i=0;i<255;i+=x){
+    redValue -= 5;
+    analogWrite(RED, redValue);
+    delay(10);
+  }
+}
+void fadeOrange(int x){
+   int redValue=0;
+   int greenValue=0;
+   //brighten then dim in orange
+  for(int i=0;i<255;i+=x){
+    redValue += 5;
+    greenValue +=1;
+    analogWrite(RED, redValue);
+    analogWrite(GREEN, greenValue);
+    delay(10);
+  }
+  for(int i=0;i<255;i+=x){
+    redValue -= 5;
+    greenValue -= 1;
+    analogWrite(RED, redValue);
+    analogWrite(GREEN, greenValue);
+    delay(10);
+  }
+}
+void fadeYellow(int x){
+   int redValue=0;
+   int greenValue=0;
+
+ //brighten then dim in yellow
+   for(int i=0;i<255;i+=x){
+    redValue += 5;
+    greenValue +=2;
+    analogWrite(RED, redValue);
+    analogWrite(GREEN, greenValue);
+    delay(10);
+  }
+    for(int i=0;i<255;i+=x){
+    redValue -= 5;
+    greenValue -= 2;
+    analogWrite(RED, redValue);
+    analogWrite(GREEN, greenValue);
+    delay(10);
+  }
+}
+void fadeGreen(int x){
+   int greenValue=0;
+ //brighten then dim in green
+   for(int i=0;i<255;i+=x){
+    greenValue += 5;
+    analogWrite(GREEN, greenValue);
+    delay(10);
+  }
+    for(int i=0;i<255;i+=x){
+    greenValue -= 5;
+    analogWrite(GREEN, greenValue);
+    delay(10);
+  }
+}
+void fadeBlue(int x){
+    int blueValue=0;
+
+   //brighten then dim in blue
+  for(int i=0;i<255;i+=x){
+    blueValue += 5;
+    analogWrite(BLUE, blueValue);
+    delay(10);
+  }
+    for(int i=0;i<255;i+=x){
+    blueValue -= 5;
+    analogWrite(BLUE, blueValue);
+    delay(10);
+  }
+}
+void fadePurple(int x){
+   int redValue=0;
+   int blueValue=0;
+  for(int i=0;i<255;i+=x){
+    blueValue += 5;
+    redValue += 5;
+    analogWrite(BLUE, blueValue);
+    analogWrite(RED, redValue);
+    delay(10);
+  }
+    for(int i=0;i<255;i+=x){
+    blueValue -= 5;
+    redValue -= 5;
+    analogWrite(BLUE, blueValue);
+    analogWrite(RED, redValue);
+    delay(10);
+  }
+}
+void fadeWhite(int x){
+   int blueValue=0;
+  for(int i=0;i<255;i+=x){
+    blueValue += 5;
+    analogWrite(BLUE, blueValue);
+    analogWrite(RED, blueValue);
+    analogWrite(GREEN, blueValue);
+    delay(10);
+  }
+  for(int i=0;i<255;i+=x){
+    blueValue -= 5;
+    analogWrite(BLUE, blueValue);
+    analogWrite(RED, blueValue);
+    analogWrite(GREEN, blueValue);
+    delay(10);
+  }
+}
+//Plays all of the medal sounds and their respective combos. 
+void allCombos(){
+  myDFPlayer.play(66);
+  delay(3000);
+  ComboCheck(5, 12, 10); //Tatoba
+  delay(3500);
+  ComboCheck(8, 9, 10); //Gatakiriba
+  delay(3500);
+  ComboCheck(11, 12, 13); //Latoratar
+  delay(3750);
+  ComboCheck(14, 15, 16); //Sagouzoh
+  delay(4000);
+  ComboCheck(17, 18, 19); //Shauta
+  delay(4000);
+  ComboCheck(5, 6, 7); //Tajadol
+  delay(4500);
+  ComboCheck(20, 21, 22); //Putotyra
+  delay(4250);
+  ComboCheck(23, 24, 25); //Burakawani
+  delay(3000);
+  ComboCheck(5, 26, 27); //Tamashiy
+  delay(7000);
+  ComboCheck(31, 32, 33); //Bikaso
+  delay(5500);
+  ComboCheck(28, 29, 30); //Saramiuo
+  delay(8500);
+  ComboCheck(35, 34, 36); //Mukachiri
+  delay(6000);
+  ComboCheck(37, 38, 39); //Shigazeshi
+  delay(13000);
+  ComboCheck(40, 41, 42); //Seishirogin
+  delay(9000);
+  ComboCheck(59, 60, 61); //Super Tatoba
+  
+  
+}
